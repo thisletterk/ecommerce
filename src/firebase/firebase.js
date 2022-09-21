@@ -19,7 +19,7 @@ import {
 	collection,
 	where,
 	addDoc,
-} from "firebase/firestore";
+} from "firebase/firestore/lite";
 
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
@@ -40,6 +40,8 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+// Initialize Google analytics
 const analytics = getAnalytics(app);
 
 // Initialize Firebase DATABASE
@@ -48,6 +50,7 @@ const db = getFirestore(app);
 // Initialize Firebase Authentication and get a reference to the service
 const provider = new GoogleAuthProvider();
 
+// Initialize Firebase Authentication and get a reference to the service
 const auth = getAuth();
 
 const signInWithGoogle = () => {
@@ -60,16 +63,23 @@ const signInWithGoogle = () => {
 			const user = result.user;
 
 			//Add user to database
-			const q = query(collection(db, "users"), where("uid", "==", user.uid));
-			const docs = await getDocs(q);
+			if (!userAuth) return;
+			const userRef = firestore.doc(`users/${userAuth.uid}`);
 
-			if (docs.docs.length === 0) {
-				await addDoc(collection(db, "users"), {
-					uid: user.uid,
-					name: user.name,
-					authProvider: "google",
-					email: user.email,
-				});
+			const snapShot = await userRef.get();
+
+			if (!snapShot.exists) {
+				try {
+					const docRef = await setDoc(collection(db, "users"), {
+						uid: user.uid,
+						name: user.displayName,
+						authProvider: "local",
+						email: user.email,
+					});
+					console.log("Document written with ID: ", docRef.id);
+				} catch (e) {
+					console.error("Error adding document: ", e);
+				}
 			}
 		})
 		.catch((error) => {
@@ -96,21 +106,41 @@ const logInWithEmailAndPassword = async (email, password) => {
 	}
 };
 
-// ------------FUNCTION TO HANDLE SIGN UP WITH EMAIL & PASSWORD-----------
-const registerWithEmailAndPassword = async (displayName, email, password) => {
-	try {
-		const res = await createUserWithEmailAndPassword(auth, email, password);
-		const user = res.user;
-		await addDoc(collection(db, "users"), {
-			uid: user.uid,
-			displayName,
-			authProvider: "local",
-			email,
+const signInUsers = () =>
+	signInWithEmailAndPassword(auth, email, password)
+		.then((userCredential) => {
+			// Signed in
+			const user = userCredential.user;
+			// ...
+		})
+		.catch((error) => {
+			const errorCode = error.code;
+			const errorMessage = error.message;
 		});
-	} catch (err) {
-		console.error(err);
-		alert(err.message);
-	}
+
+// ------------FUNCTION TO HANDLE SIGN UP WITH EMAIL & PASSWORD-----------
+
+const signUpNewUsers = () => {
+	createUserWithEmailAndPassword(auth, email, password)
+		.then(async (userCredential) => {
+			// Signed in
+			const user = userCredential.user;
+
+			// create user and add to database
+			// await addDoc(collection(db, "users"), {
+			// 	uid: user.uid,
+			// 	displayName,
+			// 	authProvider: "local",
+			// 	email,
+			// });
+			// console.log("User has been added" + user);
+		})
+		.catch((error) => {
+			const errorCode = error.code;
+			const errorMessage = error.message;
+			console.error(error);
+			alert(error.message);
+		});
 };
 
 // ------------FUNCTION TO RESET USER WITH EMAIL ---------------------
@@ -167,8 +197,10 @@ export {
 	signInWithGoogle,
 	signInWithFacebook,
 	logoutUser,
-	logInWithEmailAndPassword,
-	registerWithEmailAndPassword,
+	// logInWithEmailAndPassword,
+	// registerWithEmailAndPassword,
+	signInUsers,
+	signUpNewUsers,
 	sendPasswordReset,
 	db,
 };
